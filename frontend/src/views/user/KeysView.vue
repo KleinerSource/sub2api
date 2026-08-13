@@ -1355,7 +1355,7 @@ const customKeyError = computed(() => {
     return ''
   }
   const key = formData.value.custom_key
-  if (key.length < 16) {
+  if (key.length < 6) {
     return t('keys.customKeyTooShort')
   }
   // 检查字符：只允许字母、数字、下划线、连字符

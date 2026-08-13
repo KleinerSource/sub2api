@@ -199,9 +199,9 @@ export default {
       }
     },
     customKeyLabel: '自定义密钥',
-    customKeyPlaceholder: '输入自定义密钥（至少16个字符）',
-    customKeyHint: '仅允许字母、数字、下划线和连字符，最少16个字符。',
-    customKeyTooShort: '自定义密钥至少需要16个字符',
+    customKeyPlaceholder: '输入自定义密钥（至少6个字符）',
+    customKeyHint: '仅允许字母、数字、下划线和连字符，最少6个字符。',
+    customKeyTooShort: '自定义密钥至少需要6个字符',
     customKeyInvalidChars: '自定义密钥只能包含字母、数字、下划线和连字符',
     customKeyRequired: '请输入自定义密钥',
     ipRestriction: 'IP 限制',
