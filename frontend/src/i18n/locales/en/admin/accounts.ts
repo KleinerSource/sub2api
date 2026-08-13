@@ -782,6 +782,18 @@ export default {
 	  autoPause5hDisabled: 'Disable 5h auto-pause',
 	  autoPause7dDisabled: 'Disable 7d auto-pause',
 	  autoPauseDisabledHint: 'When enabled, this account is never auto-paused (even if a global default threshold is configured).',
+      // Low-quota model gate (OpenAI/Codex): restrict to a model subset when 7d remaining quota is low.
+      lowQuotaGate: {
+        title: 'Low-Quota Model Gate',
+        hint: 'When the 7d remaining quota drops to or below the threshold, restrict this account to only the allowed models. Other models are routed to different accounts; if all accounts are restricted, a capacity error is returned (not a model-not-found error).',
+        threshold: 'Remaining Quota Threshold (%)',
+        thresholdHint: 'Trigger the restriction when 7d remaining quota is at or below this percentage. Example: 20 means restrict when remaining ≤ 20% (i.e. used ≥ 80%).',
+        allowedModels: 'Allowed Models When Low',
+        allowedModelsHint: 'Only these models can be served once the threshold is breached. Tap a preset or add a custom model name. Model aliases are matched automatically (e.g. gpt-5.6 maps to gpt-5.6-sol).',
+        customModelPlaceholder: 'Enter a custom model name',
+        addModel: 'Add',
+        removeModel: 'Remove model',
+      },
       // Quota control (Anthropic OAuth/SetupToken only)
       quotaControl: {
         title: 'Quota Control',

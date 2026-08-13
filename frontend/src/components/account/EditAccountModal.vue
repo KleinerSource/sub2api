@@ -2199,6 +2199,103 @@
           />
           <p class="input-hint">{{ t('admin.accounts.autoPauseThresholdHint') }}</p>
         </div>
+
+        <!-- 低额度模型限制门：7d 剩余额度低于阈值时，仅允许服务白名单内的「轻量」模型 -->
+        <div class="space-y-3 border-t border-gray-200 pt-4 dark:border-dark-600">
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="input-label mb-0">{{ t('admin.accounts.lowQuotaGate.title') }}</label>
+              <button
+                type="button"
+                @click="lowQuotaGateEnabled = !lowQuotaGateEnabled"
+                :class="[
+                  'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                  lowQuotaGateEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+                ]"
+                data-testid="low-quota-gate-enabled"
+              >
+                <span
+                  :class="[
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                    lowQuotaGateEnabled ? 'translate-x-5' : 'translate-x-0'
+                  ]"
+                />
+              </button>
+            </div>
+            <p class="input-hint">{{ t('admin.accounts.lowQuotaGate.hint') }}</p>
+          </div>
+          <div v-if="lowQuotaGateEnabled" class="space-y-3">
+            <div>
+              <label class="input-label">{{ t('admin.accounts.lowQuotaGate.threshold') }}</label>
+              <input
+                v-model.number="lowQuotaGateThreshold"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                class="input"
+                data-testid="low-quota-gate-threshold"
+              />
+              <p class="input-hint">{{ t('admin.accounts.lowQuotaGate.thresholdHint') }}</p>
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.accounts.lowQuotaGate.allowedModels') }}</label>
+              <div class="mb-2 flex flex-wrap gap-1.5">
+                <button
+                  v-for="model in CODEX_PRESET_MODELS"
+                  :key="model"
+                  type="button"
+                  data-testid="low-quota-gate-preset-model"
+                  @click="toggleLowQuotaGateModel(model)"
+                  :class="[
+                    'rounded-full border px-2.5 py-1 text-xs transition-colors',
+                    lowQuotaGateAllowedModels.includes(model)
+                      ? 'border-primary-500 bg-primary-500 text-white'
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-dark-500 dark:text-gray-300 dark:hover:bg-dark-600'
+                  ]"
+                >
+                  {{ model }}
+                </button>
+              </div>
+              <div class="flex gap-2">
+                <input
+                  v-model="lowQuotaGateCustomModel"
+                  type="text"
+                  class="input flex-1"
+                  :placeholder="t('admin.accounts.lowQuotaGate.customModelPlaceholder')"
+                  data-testid="low-quota-gate-custom-model"
+                  @keydown.enter.prevent="addLowQuotaGateCustomModel"
+                />
+                <button
+                  type="button"
+                  data-testid="low-quota-gate-add-model"
+                  class="rounded-lg bg-primary-50 px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-100 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50"
+                  @click="addLowQuotaGateCustomModel"
+                >
+                  {{ t('admin.accounts.lowQuotaGate.addModel') }}
+                </button>
+              </div>
+              <div v-if="lowQuotaGateAllowedModels.length" class="mt-2 flex flex-wrap gap-1.5">
+                <span
+                  v-for="model in lowQuotaGateAllowedModels"
+                  :key="model"
+                  class="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-dark-600 dark:text-gray-300"
+                >
+                  <span class="truncate">{{ model }}</span>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded-full hover:bg-gray-200 dark:hover:bg-dark-500"
+                    :aria-label="t('admin.accounts.lowQuotaGate.removeModel')"
+                    @click="removeLowQuotaGateModel(model)"
+                  >
+                    <Icon name="x" size="xs" class="h-3.5 w-3.5" :stroke-width="2" />
+                  </button>
+                </span>
+              </div>
+              <p class="input-hint">{{ t('admin.accounts.lowQuotaGate.allowedModelsHint') }}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 配额控制 (Anthropic OAuth/SetupToken: 亲和 + 窗口费用 + 会话 + RPM 等) -->
@@ -2909,6 +3006,44 @@ const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
 const autoPause7dDisabled = ref(false)
+// 低额度模型限制门（codex）：7d 剩余额度低于阈值时仅允许服务白名单内的模型。
+const lowQuotaGateEnabled = ref(false)
+const lowQuotaGateThreshold = ref<number | null>(20)
+const lowQuotaGateAllowedModels = ref<string[]>([])
+const lowQuotaGateCustomModel = ref('')
+// 已知 codex 模型预设，供「允许模型」快速点选。
+const CODEX_PRESET_MODELS = [
+  'gpt-5.6-sol',
+  'gpt-5.6',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.3-codex-spark',
+  'gpt-5.2',
+] as const
+function toggleLowQuotaGateModel(model: string) {
+  const idx = lowQuotaGateAllowedModels.value.indexOf(model)
+  if (idx >= 0) {
+    lowQuotaGateAllowedModels.value.splice(idx, 1)
+  } else {
+    lowQuotaGateAllowedModels.value.push(model)
+  }
+}
+function addLowQuotaGateCustomModel() {
+  const model = lowQuotaGateCustomModel.value.trim()
+  if (model && !lowQuotaGateAllowedModels.value.includes(model)) {
+    lowQuotaGateAllowedModels.value.push(model)
+  }
+  lowQuotaGateCustomModel.value = ''
+}
+function removeLowQuotaGateModel(model: string) {
+  const idx = lowQuotaGateAllowedModels.value.indexOf(model)
+  if (idx >= 0) {
+    lowQuotaGateAllowedModels.value.splice(idx, 1)
+  }
+}
 const upstreamBillingAutoProbeEnabled = ref(false)
 const upstreamBillingRateSyncEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
@@ -3423,6 +3558,17 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	autoPause7dThreshold.value = typeof extra?.auto_pause_7d_threshold === 'number' ? extra.auto_pause_7d_threshold * 100 : null
 	autoPause5hDisabled.value = extra?.auto_pause_5h_disabled === true
 	autoPause7dDisabled.value = extra?.auto_pause_7d_disabled === true
+	// 低额度模型限制门回填
+	const lowQuotaGate = extra?.codex_low_quota_model_gate as
+		| { enabled?: boolean; remaining_threshold?: number; allowed_models?: unknown }
+		| undefined
+	lowQuotaGateEnabled.value = lowQuotaGate?.enabled === true
+	lowQuotaGateThreshold.value =
+		typeof lowQuotaGate?.remaining_threshold === 'number' ? lowQuotaGate.remaining_threshold * 100 : 20
+	lowQuotaGateAllowedModels.value = Array.isArray(lowQuotaGate?.allowed_models)
+		? lowQuotaGate.allowed_models.filter((m): m is string => typeof m === 'string' && m.trim() !== '')
+		: []
+	lowQuotaGateCustomModel.value = ''
 	upstreamBillingAutoProbeEnabled.value = extra?.upstream_billing_probe_enabled === true
   upstreamBillingRateSyncEnabled.value =
     upstreamBillingAutoProbeEnabled.value && extra?.upstream_billing_rate_sync_enabled === true
@@ -4807,6 +4953,21 @@ const handleSubmit = async () => {
 			newExtra.auto_pause_7d_disabled = true
 		} else {
 			delete newExtra.auto_pause_7d_disabled
+		}
+		// 低额度模型限制门：启用且配置完整时写入，否则清除（与 auto_pause 同样的 delete-when-empty 约定）
+		if (
+			lowQuotaGateEnabled.value &&
+			lowQuotaGateThreshold.value != null &&
+			lowQuotaGateThreshold.value > 0 &&
+			lowQuotaGateAllowedModels.value.length > 0
+		) {
+			newExtra.codex_low_quota_model_gate = {
+				enabled: true,
+				remaining_threshold: lowQuotaGateThreshold.value / 100,
+				allowed_models: lowQuotaGateAllowedModels.value,
+			}
+		} else {
+			delete newExtra.codex_low_quota_model_gate
 		}
 
 		delete newExtra.codex_image_generation_bridge_enabled

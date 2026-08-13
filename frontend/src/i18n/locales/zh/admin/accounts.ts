@@ -846,6 +846,18 @@ export default {
 	  autoPause5hDisabled: '禁用 5h 自动暂停',
 	  autoPause7dDisabled: '禁用 7d 自动暂停',
 	  autoPauseDisabledHint: '开启后该账号永不进入自动暂停（即使全局默认阈值已配置）。',
+      // 低额度模型限制门（OpenAI/Codex）：7d 剩余额度紧张时仅允许服务部分模型。
+      lowQuotaGate: {
+        title: '低额度模型限制门',
+        hint: '当 7d 剩余额度降至阈值及以下时，把该账号限制为仅服务「允许模型」列表中的模型。其他模型会被路由到别的账号；若所有账号都被限制则返回容量错误（而非「模型不存在」）。',
+        threshold: '剩余额度阈值 (%)',
+        thresholdHint: '当 7d 剩余额度 ≤ 该百分比时触发限制。例如填 20 表示剩余 ≤ 20%（即已用 ≥ 80%）时限制。',
+        allowedModels: '低额度时允许的模型',
+        allowedModelsHint: '触发限制后仅允许服务这些模型。点选预设或添加自定义模型名。模型别名会自动匹配（例如 gpt-5.6 会归一到 gpt-5.6-sol）。',
+        customModelPlaceholder: '输入自定义模型名',
+        addModel: '添加',
+        removeModel: '移除模型',
+      },
       // Quota control (Anthropic OAuth/SetupToken only)
       quotaControl: {
         title: '配额控制',

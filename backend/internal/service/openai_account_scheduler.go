@@ -1756,6 +1756,11 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 	if req.RequestedModel != "" && !account.IsModelSupported(req.RequestedModel) {
 		return false, "model_not_supported"
 	}
+	// 低额度模型限制门：当 codex 账号 7d 剩余额度低于其配置阈值时，仅允许服务白名单内的
+	// 「轻量」模型，昂贵模型被排除以保护稀缺配额（流量落到其他账号）。无用量信号时不限制。
+	if restricted, reason := account.IsCodexLowQuotaModelRestricted(req.RequestedModel, time.Now()); restricted {
+		return false, reason
+	}
 	if req.GroupID != nil && s != nil && s.service != nil &&
 		s.service.needsUpstreamChannelRestrictionCheck(ctx, req.GroupID) &&
 		s.service.isUpstreamModelRestrictedByChannel(ctx, *req.GroupID, account, req.RequestedModel, req.RequireCompact) {
