@@ -75,6 +75,8 @@ type APIKeyUpdateFields struct {
 	RateLimitUsage bool
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
 	IPRules bool
+	// Key 覆盖密钥本身（编辑模式下手动修改 key）。
+	Key bool
 }
 
 // IsEmpty 报告该次 Update 是否不写任何列。
@@ -230,6 +232,7 @@ type UpdateAPIKeyRequest struct {
 	Name        *string   `json:"name"`
 	GroupID     *int64    `json:"group_id"`
 	Status      *string   `json:"status"`
+	CustomKey   *string   `json:"custom_key"`   // 可选：手动修改 key 值（非空且与原值不同时更新）
 	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
 	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
 
@@ -770,6 +773,9 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		return nil, ErrInsufficientPerms
 	}
 
+	// 记录原始 key，用于：判断是否真的修改、末尾按旧 key 失效认证缓存。
+	oldKey := apiKey.Key
+
 	// 验证 IP 白名单格式
 	if req.IPWhitelist != nil && len(*req.IPWhitelist) > 0 {
 		if invalid := ip.ValidateIPPatterns(*req.IPWhitelist); len(invalid) > 0 {
@@ -795,6 +801,25 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if req.Name != nil {
 		apiKey.Name = html.EscapeString(*req.Name)
 		fields.Name = true
+	}
+
+	// 手动修改 key 值：仅当显式提供、非空且与原值不同时才校验并更新。
+	if req.CustomKey != nil {
+		newKey := strings.TrimSpace(*req.CustomKey)
+		if newKey != "" && newKey != oldKey {
+			if err := s.ValidateCustomKey(newKey); err != nil {
+				return nil, err
+			}
+			exists, err := s.apiKeyRepo.ExistsByKey(ctx, newKey)
+			if err != nil {
+				return nil, fmt.Errorf("check key exists: %w", err)
+			}
+			if exists {
+				return nil, ErrAPIKeyExists
+			}
+			apiKey.Key = newKey
+			fields.Key = true
+		}
 	}
 
 	if req.GroupID != nil {
@@ -902,7 +927,12 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		return nil, fmt.Errorf("update api key: %w", err)
 	}
 
-	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	// 任何字段变更都可能影响缓存的认证记录，按旧 key 失效；
+	// 若 key 本身被修改，再按新 key 失效一次，避免脏缓存。
+	s.InvalidateAuthCacheByKey(ctx, oldKey)
+	if fields.Key {
+		s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	}
 	s.compileAPIKeyIPRules(apiKey)
 
 	// Invalidate Redis rate limit cache so reset takes effect immediately

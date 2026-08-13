@@ -256,6 +256,9 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 	if fields.Name {
 		builder.SetName(key.Name)
 	}
+	if fields.Key {
+		builder.SetKey(key.Key)
+	}
 	if fields.Status {
 		builder.SetStatus(key.Status)
 	}

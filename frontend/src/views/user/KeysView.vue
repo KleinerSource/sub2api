@@ -97,8 +97,20 @@
           <template #cell-key="{ value, row }">
             <div class="flex items-center gap-2">
               <code class="code text-xs">
-                {{ maskApiKey(value) }}
+                {{ revealedKeyIds.has(row.id) ? value : maskApiKey(value) }}
               </code>
+              <button
+                @click="toggleRevealKey(row.id)"
+                class="rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
+                :class="
+                  revealedKeyIds.has(row.id)
+                    ? 'text-primary-500 hover:text-primary-600'
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                "
+                :title="revealedKeyIds.has(row.id) ? t('keys.hideKey') : t('keys.revealKey')"
+              >
+                <Icon :name="revealedKeyIds.has(row.id) ? 'eyeOff' : 'eye'" size="sm" />
+              </button>
               <button
                 @click="copyToClipboard(value, row.id)"
                 class="rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
@@ -538,6 +550,31 @@
             <p v-if="customKeyError" class="mt-1 text-sm text-red-500">{{ customKeyError }}</p>
             <p v-else class="input-hint">{{ t('keys.customKeyHint') }}</p>
           </div>
+        </div>
+
+        <!-- Editable API Key (edit mode only) -->
+        <div v-if="showEditModal" class="space-y-1.5">
+          <label class="input-label">{{ t('keys.editKeyLabel') }}</label>
+          <div class="relative">
+            <input
+              v-model="formData.custom_key"
+              :type="showEditKeyValue ? 'text' : 'password'"
+              class="input font-mono pr-10"
+              :class="{ 'border-red-500 dark:border-red-500': customKeyError }"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button
+              type="button"
+              @click="showEditKeyValue = !showEditKeyValue"
+              class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
+              :title="showEditKeyValue ? t('keys.hideKey') : t('keys.revealKey')"
+            >
+              <Icon :name="showEditKeyValue ? 'eyeOff' : 'eye'" size="sm" />
+            </button>
+          </div>
+          <p v-if="customKeyError" class="text-sm text-red-500">{{ customKeyError }}</p>
+          <p v-else class="input-hint">{{ t('keys.editKeyHint') }}</p>
         </div>
 
         <div v-if="showEditModal">
@@ -1305,6 +1342,12 @@ const showColumnDropdown = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
 const copiedKeyId = ref<number | null>(null)
+// 列表中已展开显示完整密钥的行
+const revealedKeyIds = ref(new Set<number>())
+// 编辑弹窗中密钥输入框的明文/密文显示开关
+const showEditKeyValue = ref(false)
+// 编辑时记录原始密钥值，用于判断是否真的修改
+const originalKeyValue = ref('')
 const groupSelectorKeyId = ref<number | null>(null)
 const publicSettings = ref<PublicSettings | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -1349,9 +1392,13 @@ const formData = ref({
   expiration_date: ''
 })
 
-// 自定义Key验证
+// 自定义Key验证（创建时开启自定义；编辑时只要填了值就校验）
 const customKeyError = computed(() => {
-  if (!formData.value.use_custom_key || !formData.value.custom_key) {
+  if (!formData.value.custom_key) {
+    return ''
+  }
+  // 编辑模式下，若值与原始密钥相同则不校验（避免历史不合规密钥打开即报错）
+  if (showEditModal.value && formData.value.custom_key === originalKeyValue.value) {
     return ''
   }
   const key = formData.value.custom_key
@@ -1443,6 +1490,17 @@ const copyToClipboard = async (text: string, keyId: number) => {
       copiedKeyId.value = null
     }, 800)
   }
+}
+
+// 切换某行密钥的明文/遮蔽显示
+const toggleRevealKey = (keyId: number) => {
+  const next = new Set(revealedKeyIds.value)
+  if (next.has(keyId)) {
+    next.delete(keyId)
+  } else {
+    next.add(keyId)
+  }
+  revealedKeyIds.value = next
 }
 
 const isAbortError = (error: unknown) => {
@@ -1566,7 +1624,7 @@ const editKey = (key: ApiKey) => {
     group_id: key.group_id,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
-    custom_key: '',
+    custom_key: key.key,
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
     ip_blacklist: (key.ip_blacklist || []).join('\n'),
@@ -1580,6 +1638,8 @@ const editKey = (key: ApiKey) => {
     expiration_preset: 'custom',
     expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : ''
   }
+  originalKeyValue.value = key.key
+  showEditKeyValue.value = false
   showEditModal.value = true
 }
 
@@ -1668,12 +1728,20 @@ const handleSubmit = async () => {
     return
   }
 
-  // Validate custom key if enabled
+  // Validate custom key if enabled (create mode)
   if (!showEditModal.value && formData.value.use_custom_key) {
     if (!formData.value.custom_key) {
       appStore.showError(t('keys.customKeyRequired'))
       return
     }
+    if (customKeyError.value) {
+      appStore.showError(customKeyError.value)
+      return
+    }
+  }
+
+  // Validate edited key value (edit mode, only when changed)
+  if (showEditModal.value && formData.value.custom_key && formData.value.custom_key !== originalKeyValue.value) {
     if (customKeyError.value) {
       appStore.showError(customKeyError.value)
       return
@@ -1731,6 +1799,10 @@ const handleSubmit = async () => {
       }
       if (shouldSubmitEditStatus(selectedKey.value, formData.value.status)) {
         updates.status = formData.value.status
+      }
+      // 仅当密钥被实际修改时才提交 custom_key
+      if (formData.value.custom_key && formData.value.custom_key !== originalKeyValue.value) {
+        updates.custom_key = formData.value.custom_key
       }
       await keysAPI.update(selectedKey.value.id, updates)
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
@@ -1806,6 +1878,8 @@ const closeModals = () => {
     expiration_preset: '30',
     expiration_date: ''
   }
+  showEditKeyValue.value = false
+  originalKeyValue.value = ''
 }
 
 // Show reset quota confirmation dialog

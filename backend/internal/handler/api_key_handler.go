@@ -51,6 +51,7 @@ type UpdateAPIKeyRequest struct {
 	Name        string    `json:"name"`
 	GroupID     *int64    `json:"group_id"`
 	Status      string    `json:"status" binding:"omitempty,oneof=active inactive"`
+	CustomKey   *string   `json:"custom_key"`   // 可选：手动修改 key 值
 	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
 	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
 	Quota       *float64  `json:"quota"`        // 配额限制 (USD), 0=无限制
@@ -260,6 +261,7 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		RateLimit1d:         req.RateLimit1d,
 		RateLimit7d:         req.RateLimit7d,
 		ResetRateLimitUsage: req.ResetRateLimitUsage,
+		CustomKey:           req.CustomKey,
 	}
 	if req.Name != "" {
 		svcReq.Name = &req.Name
